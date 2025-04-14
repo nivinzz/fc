@@ -183,7 +183,10 @@
                 datasets: [{
                     label: 'Giá',
                     data: [],
-                    borderColor: 'blue',
+                    borderColor: '#007bff',
+                    borderWidth: 1.5, // Đường giá mỏng hơn
+                    pointRadius: 2, // Giảm kích thước điểm dữ liệu
+                    pointHoverRadius: 4,
                     fill: false
                 }]
             },
@@ -191,8 +194,34 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    x: { title: { display: true, text: 'Ngày' } },
-                    y: { title: { display: true, text: 'Giá (USDT)' } }
+                    x: {
+                        title: { display: true, text: 'Ngày' },
+                        ticks: {
+                            maxTicksLimit: 10, // Giới hạn số lượng nhãn trên trục x để tránh chồng lấn
+                            maxRotation: 45,
+                            minRotation: 45
+                        },
+                        grid: {
+                            display: true, // Hiển thị lưới trên trục x
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    y: {
+                        title: { display: true, text: 'Giá (USDT)' },
+                        grid: {
+                            display: true, // Hiển thị lưới trên trục y
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            font: {
+                                size: 12
+                            }
+                        }
+                    }
                 }
             }
         });
