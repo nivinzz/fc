@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng dụng tính toán giao dịch</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Flatpickr CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .card {
+            margin-bottom: 20px;
+        }
+        .form-label {
+            font-weight: bold;
+        }
+        #coinSelect {
+            width: 300px;
+        }
+        #result, #netProfit, #priceRange {
+            white-space: pre-wrap;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Ứng dụng tính toán giao dịch</h1>
+
+        <!-- Form nhập liệu -->
+        <div class="card">
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Chọn sàn -->
+                    <div class="col-md-3">
+                        <label for="exchangeSelect" class="form-label">Chọn sàn:</label>
+                        <select id="exchangeSelect" class="form-select">
+                            <option value="Binance">Binance</option>
+                            <option value="OKX">OKX</option>
+                            <option value="Bybit">Bybit</option>
+                            <option value="Gate.io">Gate.io</option>
+                        </select>
+                    </div>
+
+                    <!-- Chọn coin -->
+                    <div class="col-md-3">
+                        <label for="coinSelect" class="form-label">Chọn coin:</label>
+                        <select id="coinSelect" class="form-select"></select>
+                    </div>
+
+                    <!-- Ngày vào -->
+                    <div class="col-md-3">
+                        <label for="entryDate" class="form-label">Ngày vào:</label>
+                        <input type="text" id="entryDate" class="form-control" placeholder="Chọn ngày">
+                    </div>
+
+                    <!-- Ngày chốt -->
+                    <div class="col-md-3">
+                        <label for="exitDate" class="form-label">Ngày chốt:</label>
+                        <input type="text" id="exitDate" class="form-control" placeholder="Chọn ngày">
+                    </div>
+
+                    <!-- Nút xem biểu đồ -->
+                    <div class="col-12 text-center">
+                        <button class="btn btn-primary" onclick="showChart()">Xem biểu đồ</button>
+                    </div>
+
+                    <!-- Giá vào -->
+                    <div class="col-md-3">
+                        <label for="entryPrice" class="form-label">Giá vào:</label>
+                        <input type="number" id="entryPrice" class="form-control" step="0.01">
+                    </div>
+
+                    <!-- Giá chốt lãi -->
+                    <div class="col-md-3">
+                        <label for="takeProfit" class="form-label">Giá chốt lãi:</label>
+                        <input type="number" id="takeProfit" class="form-control" step="0.01">
+                    </div>
+
+                    <!-- Vị thế -->
+                    <div class="col-md-3">
+                        <label for="positionSelect" class="form-label">Vị thế:</label>
+                        <select id="positionSelect" class="form-select">
+                            <option value="Long">Long</option>
+                            <option value="Short">Short</option>
+                        </select>
+                    </div>
+
+                    <!-- Số vốn -->
+                    <div class="col-md-3">
+                        <label for="capital" class="form-label">Số vốn:</label>
+                        <input type="number" id="capital" class="form-control" step="0.01">
+                    </div>
+
+                    <!-- Đòn bẩy -->
+                    <div class="col-md-3">
+                        <label for="leverage" class="form-label">Đòn bẩy:</label>
+                        <input type="number" id="leverage" class="form-control" step="1">
+                    </div>
+
+                    <!-- Nút tính toán -->
+                    <div class="col-12 text-center">
+                        <button class="btn btn-success" onclick="calculate()">Tính toán</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Thông báo giá thấp nhất/cao nhất -->
+        <div class="card">
+            <div class="card-body">
+                <p id="priceRange" class="text-muted"></p>
+            </div>
+        </div>
+
+        <!-- Biểu đồ -->
+        <div class="card">
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="priceChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kết quả tính toán -->
+        <div class="card">
+            <div class="card-body">
+                <p id="result"></p>
+                <p id="netProfit" class="fw-bold"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Flatpickr JS -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Khởi tạo DatePicker
+        flatpickr("#entryDate", { dateFormat: "Y-m-d" });
+        flatpickr("#exitDate", { dateFormat: "Y-m-d" });
+
+        // Dữ liệu phí của các sàn
+        const exchangeFees = {
+            "Binance": { spot_maker: 0.001, spot_taker: 0.001, futures_maker: 0.0002, futures_taker: 0.0005, funding_rate: 0.0003 },
+            "OKX": { spot_maker: 0.0008, spot_taker: 0.001, futures_maker: 0.0002, futures_taker: 0.0005, funding_rate: 0.0003 },
+            "Bybit": { spot_maker: 0.001, spot_taker: 0.001, futures_maker: 0.0002, futures_taker: 0.00055, funding_rate: 0.0003 },
+            "Gate.io": { spot_maker: 0.001, spot_taker: 0.001, futures_maker: 0.0002, futures_taker: 0.0005, funding_rate: 0.0003 }
+        };
+
+        // Ngày niêm yết của PI trên OKX
+        const piListingDate = new Date("2023-12-22");
+
+        // Danh sách coin và vốn hóa
+        let topCoins = [];
+        let coinMarketCaps = {};
+
+        // Dữ liệu biểu đồ
+        let priceChart;
+        let dates = [];
+        let prices = [];
+
+        // Khởi tạo biểu đồ
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        priceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Giá',
+                    data: [],
+                    borderColor: 'blue',
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Ngày' } },
+                    y: { title: { display: true, text: 'Giá (USDT)' } }
+                }
+            }
+        });
+
+        // Định dạng số tiền
+        function formatCurrency(value) {
+            value = Math.round(value * 100) / 100;
+            let [integerPart, decimalPart] = value.toString().split('.');
+            integerPart = integerPart.split('').reverse().join('');
+            let formattedInteger = '';
+            for (let i = 0; i < integerPart.length; i++) {
+                if (i > 0 && i % 3 === 0) formattedInteger = '.' + formattedInteger;
+                formattedInteger = integerPart[i] + formattedInteger;
+            }
+            decimalPart = decimalPart ? decimalPart.padEnd(2, '0') : '00';
+            return `${formattedInteger},${decimalPart} $`;
+        }
+
+        // Định dạng vốn hóa
+        function formatMarketCap(value) {
+            if (value >= 1_000_000_000) {
+                return `${(value / 1_000_000_000).toFixed(3).replace('.', ',')}B`;
+            } else if (value >= 1_000_000) {
+                return `${(value / 1_000_000).toFixed(3).replace('.', ',')}M`;
+            } else {
+                return formatCurrency(value).replace(' $', '');
+            }
+        }
+
+        // Lấy danh sách 100 coin từ CoinGecko
+        async function fetchTop100Coins() {
+            try {
+                const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false');
+                const data = await response.json();
+                let coinData = data.map(item => ({
+                    symbol: item.symbol.toUpperCase(),
+                    marketCap: item.market_cap
+                }));
+
+                // Sắp xếp theo tên coin (A-Z)
+                coinData.sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+                topCoins = coinData.map(coin => coin.symbol);
+                coinMarketCaps = Object.fromEntries(coinData.map(coin => [coin.symbol, coin.marketCap]));
+
+                // Cập nhật danh sách coin
+                const coinSelect = document.getElementById('coinSelect');
+                coinSelect.innerHTML = '';
+                topCoins.forEach(coin => {
+                    const option = document.createElement('option');
+                    option.value = coin;
+                    option.textContent = `${coin} (${formatMarketCap(coinMarketCaps[coin])})`;
+                    coinSelect.appendChild(option);
+                });
+            } catch (error) {
+                document.getElementById('priceRange').textContent = `Lỗi khi lấy danh sách coin: ${error.message}`;
+            }
+        }
+
+        // Lấy dữ liệu giá từ sàn
+        async function fetchPriceData(coin, startDate, endDate) {
+            const exchange = document.getElementById('exchangeSelect').value;
+
+            // Xử lý coin PI trên OKX
+            if (coin === "PI" && exchange === "OKX" && startDate < piListingDate) {
+                document.getElementById('priceRange').textContent = `PI được niêm yết trên OKX vào ngày ${piListingDate.toISOString().split('T')[0]}. Dữ liệu giá sẽ được lấy từ ngày này.`;
+                startDate = new Date(piListingDate);
+            }
+
+            const startTs = Math.floor(startDate.getTime());
+            const endTs = Math.floor(endDate.getTime());
+            const symbol = `${coin}USDT`;
+            let url;
+
+            if (exchange === "Binance") {
+                url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1d&startTime=${startTs}&endTime=${endTs}&limit=1000`;
+            } else if (exchange === "OKX") {
+                url = `https://www.okx.com/api/v5/market/history-candles?instId=${symbol}&bar=1D&t=${startTs}&limit=1000`;
+            } else if (exchange === "Bybit") {
+                url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=D&start=${startTs}&end=${endTs}&limit=1000`;
+            } else if (exchange === "Gate.io") {
+                url = `https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${symbol}&interval=1d&from=${startTs/1000}&to=${endTs/1000}&limit=1000`;
+            }
+
+            dates = [];
+            prices = [];
+
+            try {
+                while (startTs < endTs) {
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    if (!data || (exchange === "OKX" && !data.data)) break;
+
+                    if (exchange === "Binance") {
+                        data.forEach(entry => {
+                            const timestamp = entry[0] / 1000;
+                            const date = new Date(timestamp * 1000).toISOString().split('T')[0];
+                            const closePrice = parseFloat(entry[4]);
+                            if (closePrice > 0) {
+                                dates.push(date);
+                                prices.push(closePrice);
+                            }
+                        });
+                        if (data.length > 0) {
+                            const lastTs = data[data.length - 1][0] + 1;
+                            url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1d&startTime=${lastTs}&endTime=${endTs}&limit=1000`;
+                        } else {
+                            break;
+                        }
+                    } else if (exchange === "OKX") {
+                        data.data.forEach(entry => {
+                            const timestamp = parseInt(entry[0]) / 1000;
+                            const date = new Date(timestamp * 1000).toISOString().split('T')[0];
+                            const closePrice = parseFloat(entry[4]);
+                            if (closePrice > 0) {
+                                dates.push(date);
+                                prices.push(closePrice);
+                            }
+                        });
+                        if (data.data.length > 0) {
+                            const lastTs = parseInt(data.data[data.data.length - 1][0]) + 1;
+                            url = `https://www.okx.com/api/v5/market/history-candles?instId=${symbol}&bar=1D&t=${lastTs}&limit=1000`;
+                        } else {
+                            break;
+                        }
+                    } else if (exchange === "Bybit") {
+                        data.result.list.forEach(entry => {
+                            const timestamp = parseInt(entry[0]) / 1000;
+                            const date = new Date(timestamp * 1000).toISOString().split('T')[0];
+                            const closePrice = parseFloat(entry[4]);
+                            if (closePrice > 0) {
+                                dates.push(date);
+                                prices.push(closePrice);
+                            }
+                        });
+                        break;
+                    } else if (exchange === "Gate.io") {
+                        data.forEach(entry => {
+                            const timestamp = parseInt(entry[0]);
+                            const date = new Date(timestamp * 1000).toISOString().split('T')[0];
+                            const closePrice = parseFloat(entry[5]);
+                            if (closePrice > 0) {
+                                dates.push(date);
+                                prices.push(closePrice);
+                            }
+                        });
+                        break;
+                    }
+                }
+
+                if (prices.length === 0) return false;
+                return true;
+            } catch (error) {
+                document.getElementById('priceRange').textContent = `Lỗi khi lấy dữ liệu: ${error.message}`;
+                return false;
+            }
+        }
+
+        // Hiển thị biểu đồ
+        async function showChart() {
+            const coinSelect = document.getElementById('coinSelect');
+            const coin = coinSelect.value;
+            const entryDateStr = document.getElementById('entryDate').value;
+            const exitDateStr = document.getElementById('exitDate').value;
+
+            if (!coin || !entryDateStr || !exitDateStr) {
+                document.getElementById('priceRange').textContent = "Vui lòng nhập đầy đủ thông tin!";
+                return;
+            }
+
+            const entryDate = new Date(entryDateStr);
+            const exitDate = new Date(exitDateStr);
+            const earliestDate = new Date("2016-01-01");
+            const currentDate = new Date("2025-04-13");
+
+            if (exitDate < entryDate) {
+                document.getElementById('priceRange').textContent = "Ngày chốt phải sau ngày vào!";
+                priceChart.data.labels = [];
+                priceChart.data.datasets[0].data = [];
+                priceChart.update();
+                return;
+            }
+
+            if (entryDate < earliestDate) {
+                document.getElementById('priceRange').textContent = `Ngày vào phải từ ${earliestDate.toISOString().split('T')[0]} trở đi!`;
+                priceChart.data.labels = [];
+                priceChart.data.datasets[0].data = [];
+                priceChart.update();
+                return;
+            }
+
+            if (exitDate > currentDate) {
+                document.getElementById('priceRange').textContent = `Ngày chốt không được vượt quá ngày hiện tại (${currentDate.toISOString().split('T')[0]})!`;
+                priceChart.data.labels = [];
+                priceChart.data.datasets[0].data = [];
+                priceChart.update();
+                return;
+            }
+
+            const success = await fetchPriceData(coin, entryDate, exitDate);
+            if (!success) {
+                document.getElementById('priceRange').textContent = `Không có dữ liệu giá cho ${coin} trong khoảng thời gian này!`;
+                priceChart.data.labels = [];
+                priceChart.data.datasets[0].data = [];
+                priceChart.update();
+                return;
+            }
+
+            priceChart.data.labels = dates;
+            priceChart.data.datasets[0].data = prices;
+            priceChart.data.datasets[0].label = `Giá ${coin}`;
+            priceChart.options.plugins = {
+                title: {
+                    display: true,
+                    text: `Biểu đồ giá ${coin} từ ${entryDateStr} đến ${exitDateStr}`
+                }
+            };
+            priceChart.update();
+
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const minPriceDate = dates[prices.indexOf(minPrice)];
+            const maxPriceDate = dates[prices.indexOf(maxPrice)];
+            document.getElementById('priceRange').textContent = `Giá thấp nhất: $${minPrice.toFixed(6)} (ngày ${minPriceDate}) | Giá cao nhất: $${maxPrice.toFixed(6)} (ngày ${maxPriceDate})`;
+        }
+
+        // Tính toán giao dịch
+        async function calculate() {
+            const exchange = document.getElementById('exchangeSelect').value;
+            const coinSelect = document.getElementById('coinSelect');
+            const coin = coinSelect.value;
+            const entryPrice = parseFloat(document.getElementById('entryPrice').value);
+            const takeProfit = parseFloat(document.getElementById('takeProfit').value);
+            const capital = parseFloat(document.getElementById('capital').value);
+            const leverage = parseFloat(document.getElementById('leverage').value);
+            const position = document.getElementById('positionSelect').value;
+            const entryDateStr = document.getElementById('entryDate').value;
+            const exitDateStr = document.getElementById('exitDate').value;
+
+            if (!coin || !entryDateStr || !exitDateStr || isNaN(entryPrice) || isNaN(takeProfit) || isNaN(capital) || isNaN(leverage)) {
+                document.getElementById('result').textContent = "Vui lòng nhập đầy đủ và đúng định dạng số!";
+                return;
+            }
+
+            const entryDate = new Date(entryDateStr);
+            const exitDate = new Date(exitDateStr);
+
+            if (exitDate < entryDate) {
+                document.getElementById('result').textContent = "Ngày chốt phải sau ngày vào!";
+                return;
+            }
+
+            if (dates.length === 0 || prices.length === 0) {
+                const success = await fetchPriceData(coin, entryDate, exitDate);
+                if (!success) {
+                    document.getElementById('result').textContent = "Không có dữ liệu giá để tính toán!";
+                    return;
+                }
+            }
+
+            // Tìm ngày đạt giá chốt lãi
+            let targetDate = exitDate;
+            for (let i = 0; i < dates.length; i++) {
+                const price = prices[i];
+                const date = new Date(dates[i]);
+                if (date < entryDate) continue;
+                if (position === "Long" && price >= takeProfit) {
+                    targetDate = date;
+                    break;
+                } else if (position === "Short" && price <= takeProfit) {
+                    targetDate = date;
+                    break;
+                }
+            }
+
+            // Tính giá thanh lý
+            const liquidationPrice = position === "Long" ?
+                entryPrice * (1 - 1/leverage) :
+                entryPrice * (1 + 1/leverage);
+
+            // Kiểm tra cháy tài khoản
+            let liquidationDate = null;
+            let liquidationPriceAtDate = null;
+            for (let i = 0; i < dates.length; i++) {
+                const price = prices[i];
+                const date = new Date(dates[i]);
+                if (date < entryDate) continue;
+                if (date > targetDate) break;
+                if (position === "Long" && price <= liquidationPrice) {
+                    liquidationDate = date;
+                    liquidationPriceAtDate = price;
+                    break;
+                } else if (position === "Short" && price >= liquidationPrice) {
+                    liquidationDate = date;
+                    liquidationPriceAtDate = price;
+                    break;
+                }
+            }
+
+            if (liquidationDate) {
+                const resultText = `Sàn: ${exchange}\nCoin: ${coin}\nVốn vào: ${formatCurrency(capital)}\nĐòn bẩy: ${leverage}x\n`;
+                document.getElementById('result').textContent = resultText;
+                document.getElementById('netProfit').textContent = `Tài khoản bị thanh lý tại giá ${liquidationPriceAtDate.toFixed(6)} vào ngày ${liquidationDate.toLocaleDateString('vi-VN')}`;
+                document.getElementById('netProfit').style.color = 'red';
+                return;
+            }
+
+            // Tính toán lợi nhuận
+            const daysHolding = Math.max(0, Math.round((targetDate - entryDate) / (1000 * 60 * 60 * 24)));
+            const volume = (capital * leverage) / entryPrice;
+            const profit = position === "Long" ?
+                volume * (takeProfit - entryPrice) :
+                volume * (entryPrice - takeProfit);
+
+            const fees = exchangeFees[exchange];
+            const tradingFee = volume * entryPrice * fees.futures_maker + volume * takeProfit * fees.futures_taker;
+            const fundingFee = volume * entryPrice * fees.funding_rate * daysHolding;
+            const netProfit = profit - tradingFee - fundingFee;
+
+            const resultText = `Sàn: ${exchange}\nCoin: ${coin}\nVốn vào: ${formatCurrency(capital)}\nĐòn bẩy: ${leverage}x\nSố ngày treo lãi: từ ${entryDate.toLocaleDateString('vi-VN')} đến ${targetDate.toLocaleDateString('vi-VN')} (${daysHolding} ngày)\nLợi nhuận: ${formatCurrency(profit)}\nPhí giao dịch: ${formatCurrency(tradingFee)}\nPhí funding (tổng): ${formatCurrency(fundingFee)}\n`;
+            document.getElementById('result').textContent = resultText;
+            document.getElementById('netProfit').textContent = `Lợi nhuận ròng: ${formatCurrency(netProfit)}`;
+            document.getElementById('netProfit').style.color = 'green';
+        }
+
+        // Khởi tạo ứng dụng
+        window.onload = () => {
+            fetchTop100Coins();
+        };
+    </script>
+</body>
+</html>
